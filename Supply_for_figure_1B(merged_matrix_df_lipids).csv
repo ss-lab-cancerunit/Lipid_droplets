@@ -1,0 +1,57 @@
+,LPS+ATP vs Untreated in KO,LPS vs Untreated in WT,WT vs KO with LPS+ATP,LPS+ATP vs Untreated in WT
+lipid metabolic process,-2.650548608,0,-1.502781166,-5.593241528
+response to lipid,22.16641606,22.95379237,-10.70876548,25.45293986
+unsaturated fatty acid metabolic process,-3.699106743,0,0,-4.54421519
+fatty acid metabolic process,-3.464649372,0,0,-6.186898604
+arachidonate metabolic process,-3.035027957,0,0,-3.008994209
+long-chain fatty acid metabolic process,-2.333553344,0,0,-2.58142582
+cellular response to lipid,14.21426493,15.36516595,-5.259030234,12.73873823
+long-chain fatty acid biosynthetic process,-1.94222339,0,0,-1.983737053
+unsaturated fatty acid biosynthetic process,-1.829353686,0,0,-1.534356685
+lipid catabolic process,-1.712045816,0,0,-1.453084582
+lipid biosynthetic process,-1.561948133,0,0,-2.550648528
+linoleic acid metabolic process,-1.394153126,0,0,0
+cholesterol biosynthetic process,0,-1.466820472,-1.961811978,0
+sterol biosynthetic process,0,-1.373297378,-2.447557938,0
+sterol metabolic process,0,0,-2.943069455,0
+response to estradiol,2.08570361,3.236918735,-2.865304188,3.970427393
+cholesterol metabolic process,0,0,-2.574439938,0
+cellular response to estradiol stimulus,0,0,-2.339584579,0
+response to progesterone,3.851055928,1.825310158,-2.053683994,2.738234185
+cellular response to fatty acid,0,0,-1.719117293,0
+diacylglycerol biosynthetic process,0,0,-1.428892567,0
+sphingolipid metabolic process,0,0,0,-2.574456675
+fatty acid derivative metabolic process,0,0,0,-1.970986196
+membrane lipid metabolic process,0,0,0,-1.793125793
+diacylglycerol metabolic process,0,0,0,-1.44157945
+lipid localization,5.193667051,1.487083757,0,3.807628187
+lipid transport,4.70342036,0,0,3.760412182
+positive regulation of fatty acid transport,3.521139085,2.183608403,0,4.302905842
+fatty acid transport,3.326545784,1.348308831,0,5.002218835
+regulation of fatty acid transport,3.176077404,2.194804958,0,3.466652572
+regulation of lipid localization,3.003071723,1.968484968,0,1.9898619
+lipid export from cell,2.976147602,0,0,2.446047388
+positive regulation of lipid localization,2.656924462,2.105385121,0,2.469238891
+cholesterol homeostasis,2.302030923,0,0,1.638203685
+sterol homeostasis,2.23754651,0,0,1.575220023
+response to fatty acid,2.181592617,0,0,0
+positive regulation of lipid biosynthetic process,1.88396621,0,0,1.795892004
+regulation of lipid metabolic process,1.798894959,0,0,1.559197276
+regulation of lipid transport,1.768389783,1.503975976,0,0
+positive regulation of long-chain fatty acid import into cell,1.667017913,0,0,2.644069592
+response to oleic acid,1.667017913,0,0,1.421353131
+positive regulation of lipid transport,1.638891994,1.479091048,0,1.758628485
+positive regulation of lipid metabolic process,1.507440902,0,0,0
+regulation of lipid biosynthetic process,1.485711344,0,0,1.587974472
+lipid storage,1.44499552,0,0,0
+progesterone biosynthetic process,1.37365125,0,0,0
+response to 1-oleoyl-sn-glycerol 3-phosphate,1.31491336,0,0,0
+cellular response to oleic acid,1.31491336,0,0,0
+lipid import into cell,1.313799233,0,0,1.354871396
+positive regulation of fatty acid biosynthetic process,0,1.427251792,0,0
+long-chain fatty acid transport,0,0,0,2.068385822
+positive regulation of long-chain fatty acid import across plasma membrane,0,0,0,1.878185875
+arachidonate transport,0,0,0,1.456630913
+arachidonate secretion,0,0,0,1.456630913
+regulation of fatty acid metabolic process,0,0,0,1.44564576
+long-chain fatty acid import across plasma membrane,0,0,0,1.408493799
