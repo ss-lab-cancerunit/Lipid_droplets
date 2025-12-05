@@ -13,12 +13,13 @@ To decode the transcriptional regulation of immunometabolism, we performed a com
 
 Aim: To identify upstream transcriptional drivers in lipid metabolism-related pathways.
 
-Key Findings: a significant lipid metabolic reorganization upon NLRP3 activation, particularly after ATP was added as a secondary stimulation.
--Enhanced Lipid Sensitivity: Transcriptional signatures indicate a marked increase in cellular responsiveness to lipid signals.
--Pathway Enrichment: Multiple rate-limiting metabolic genes were differentially expressed and significantly enriched in lipid synthesis and storage pathways.
+Key Findings: 
+-A significant lipid metabolic reorganization upon NLRP3 activation, particularly after ATP was added as a secondary stimulation.
+-Multiple rate-limiting metabolic genes were differentially expressed and significantly enriched in lipid synthesis and storage pathways.
 
 Experimental Validation (PA Lab):
 Validation: Wet-lab experiments confirmed that NLRP3 activation drives lipid droplet accumulation.
 Novel Insight: Lipid Droplet accumulation itself promotes NLRP3 activation.
 
-Conclusion: Lipid droplets are not merely passive storage organelles or byproducts of metabolic changes; they act as active regulators of inflammation.
+Significant: 
+Lipid droplets are not merely passive storage organelles or byproducts of metabolic changes; they act as active regulators of inflammation.
