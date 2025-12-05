@@ -1,0 +1,528 @@
+---
+title: "scripts for LD"
+author: "Yujia Zhang"
+date: "2025-12-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#load packages
+```{r}
+library(tidyverse)  
+library(pheatmap)
+library(dplyr)
+library(stringr)
+library(RColorBrewer)
+library(forcats)
+library(readr)
+library(tidyverse)  
+library(dplyr)
+library(stringr)
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(circlize)
+library(grid)
+library(ggplot2)
+library(ggrepel)
+library(ggforce)
+library(ggbreak)
+```
+
+#rrvgo result (bubble)
+```{r}
+rrvgo_df <- read_csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/Downstream analysis/gprofiler_output_0624/GO_BP_output/rrvgo_GOBP_output_0625_each_comparison/rrvgo_GO_BP_csv/Up_WT_LPS_ATP_WT_Control(BH_FDR)_rrvgo_reduced_terms.csv")
+
+#rrvgo_df <- read_csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/Downstream analysis/gprofiler_output_0624/GO_BP_output/rrvgo_GOBP_output_0625_each_comparison/rrvgo_GO_BP_csv/Up_WT_LPS vs Control(BH_FDR)_rrvgo_reduced_terms.csv")
+
+# retain termDispensability == 0 
+df_filtered <- rrvgo_df %>%
+  filter(termDispensability == 0) %>%
+  slice_max(score, n = 30)
+
+df_filtered <- df_filtered %>%
+  mutate(term = str_replace(
+    term,
+    "biological process involved in interspecies interaction between organisms",
+    "regulation of multicellular organismal process",
+   ""
+  ))
+
+df_filtered$term <- fct_reorder(df_filtered$term, df_filtered$score)
+
+ggplot(df_filtered, aes(x = score, y = term, size = size, color = score)) +
+  geom_point(alpha = 0.8) +
+  scale_size_continuous(range = c(4, 10)) +
+  scale_color_gradient(low = "skyblue", high = "red") +
+  labs(
+    title = "Top 30 GO:BP terms enriched among DEGs upregulated with LPS+ATP",
+    x = "-log10(adjusted p-value)",
+    y = "GO:BP Term",
+    size = "Gene Count",
+    color = "Enrichment score: -log10 Padj"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(axis.text.y = element_text(size = 20))+ 
+  theme(
+    plot.title.position = "plot",         
+    plot.title = element_text(hjust = 0.5) 
+  )
+ggsave("GO_BP_bubble_plot_LPS_ATP.pdf", width = 12, height = 8)
+```
+
+#make the marix
+```{r}
+#load the enrichment pathway files created by g:Profiler website.
+
+##pathway to csv folder (rrvgo_GO_BP_csv.zip in github).
+data_dir <- "C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/Downstream analysis/gprofiler_output_0624/GO_BP_output/rrvgo_GOBP_output_0625_each_comparison/rrvgo_GO_BP_csv" 
+
+# find all csv file.
+csv_files <- list.files(data_dir, pattern = "\\.csv$", full.names = TRUE)
+
+# generate an empty list.
+all_data <- list()
+
+# Loop through each file and add the comparison group name (file name removal "_rrvgo_reduced_terms.csv")
+for(file in csv_files) {
+  # Extract the comparison group name in the format such as "Up_WT_LPS_ATP_WT_Control"
+  comp_name <- basename(file) %>%
+  gsub("_rrvgo_reduced_terms\\.csv$", "", .) %>%
+  gsub("\\(BH_FDR\\)", "", .)
+
+  # read csv
+  df <- read.csv(file, stringsAsFactors = FALSE)
+  
+  # choose columns "term" and "score"
+  # score stands for negative_log10_of_adjusted_p_value.
+  df_selected <- df %>% select(term, score)
+  
+  # Add a comparison group ID
+  df_selected <- df_selected %>% mutate(comparison = comp_name)
+  
+  all_data[[comp_name]] <- df_selected
+}
+
+# Got the dataframe including term, score and comparison group.
+# Combine data from all comparison groups
+combined_data <- bind_rows(all_data)
+
+# only pick the pathways we interested in (before filter,8490; after filter,5662)
+keep_comparisons <- c(
+  "Up_KO_LPS_ATP_KO_Control", "Down_KO_LPS_ATP_KO_Control",
+  "Up_WT_LPS_ATP_KO_LPS_ATP", "Down_WT_LPS_ATP_KO_LPS_ATP",
+  "Up_WT_LPS_ATP_WT_Control", "Down_WT_LPS_ATP_WT_Control",
+  "Up_WT_LPS vs Control", "Down_WT_LPS vs Control"
+)
+major_groups_combined_data <- combined_data %>%
+  filter(comparison %in% keep_comparisons)
+
+# All pathways after filtering with score>=2 (P<0.01)
+combined_data_score_2 <- combined_data %>%
+  filter(score >= 2)
+
+# Build the matrix
+# Build a matrix of "GO term × comparison" with the missing value of 0
+all_pathway_matrix <- combined_data %>% 
+  pivot_wider(names_from = comparison, values_from = score, values_fill = list(score = 0)) %>%
+  column_to_rownames("term")
+
+# Build a matrix that we interested in (3800 rows;2500 rows after filtering)
+major_pathway_matrix <- major_groups_combined_data %>% 
+  pivot_wider(names_from = comparison, values_from = score, values_fill = list(score = 0)) %>%
+  column_to_rownames("term")
+```
+
+# heatmap
+## All pathways.
+### merge up- and down- in one heatmap 
+```{r}
+# prepare an empty matrix
+merged_matrix <- list()
+
+# extract all unique comparison name and delete the prefix
+all_contrasts <- unique(gsub("^(Up_|Down_)", "", colnames(major_pathway_matrix)))
+
+for (contrast in all_contrasts) {
+  up_col <- paste0("Up_", contrast)
+  down_col <- paste0("Down_", contrast)
+  
+  up_vals <- if (up_col %in% colnames(major_pathway_matrix)) major_pathway_matrix[, up_col] else 0
+  down_vals <- if (down_col %in% colnames(major_pathway_matrix)) -major_pathway_matrix[, down_col] else 0
+  
+  # up-regulated is positive value
+  merged_matrix[[contrast]] <- up_vals + down_vals
+}
+
+# merge to a new data.frame
+merged_matrix_df <- do.call(cbind, merged_matrix)
+rownames(merged_matrix_df) <- rownames(major_pathway_matrix)
+
+## extract lipid-related GOBP terms.
+# use Regular Expressions to filter the GO term including lipid.
+lipid_terms_score_1.3 <- grepl("lipid|fatty acid|cholesterol|triglyceride|estradiol|sphingolipid|phosphatidylcholine|sterol|glycerol|progesterone|oleic acid|arachidonate|linoleic acid|bile acid", rownames(major_pathway_matrix), ignore.case = TRUE)
+rownames(major_pathway_matrix)[lipid_terms_score_1.3]
+lipid_matrix_score_1.3 <- major_pathway_matrix[lipid_terms_score_1.3, ]
+
+# prepare an empty matrix
+merged_matrix_lipids <- list()
+
+# extract all unique comparison name and delete the prefix
+all_contrasts_lipids <- unique(gsub("^(Up_|Down_)", "", colnames(lipid_matrix_score_1.3)))
+
+for (contrast in all_contrasts_lipids) {
+  up_col <- paste0("Up_", contrast)
+  down_col <- paste0("Down_", contrast)
+  
+  up_vals <- if (up_col %in% colnames(lipid_matrix_score_1.3)) lipid_matrix_score_1.3[, up_col] else 0
+  down_vals <- if (down_col %in% colnames(lipid_matrix_score_1.3)) -lipid_matrix_score_1.3[, down_col] else 0
+  
+  # up-regulated is positive value
+  merged_matrix_lipids[[contrast]] <- up_vals + down_vals
+}
+
+# merge to a new data.frame
+merged_matrix_df_lipids <- do.call(cbind, merged_matrix_lipids)
+rownames(merged_matrix_df_lipids) <- rownames(lipid_matrix_score_1.3)
+
+#in this LD paper, we only need two columns.
+lipids_matrix <- read.csv("C:/Users/HUAWEI/Box/01. Yujia_Paras Shared folder/00. Yujia_Shamith_Paras_computational data/Lipidroplets_panel/2025-10-03-individual_panel/Supply_for_figure_1B(merged_matrix_df_lipids).csv", row.names = 1)
+# delete the columns
+lipids_matrix$WT.vs.KO.with.LPS.ATP <- NULL
+lipids_matrix$LPS.ATP.vs.Untreated.in.KO <- NULL
+# delete the empty rows
+lipids_matrix <- lipids_matrix %>%
+  filter(!if_all(-1, ~ .x == 0))
+# rename the column names
+colnames(lipids_matrix) <- c("LPS vs Control", "LPS+ATP vs Control")
+```
+
+## set up two legends
+```{r}
+row_labels <- rownames(lipids_matrix)
+row_colors <- rep("black", length(row_labels))
+
+# create matrix
+mat <- as.matrix(lipids_matrix)
+
+# color function
+col_fun <- colorRamp2(c(-6, 0, 6), c("#08306B", "white", "#B2182B"))
+```
+## mainbody of heatmap
+```{r}
+# build heatmap
+ht <- Heatmap(
+  mat,
+  name = "score", 
+  col = col_fun,
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_names_gp = gpar(fontsize = 20),
+  row_names_gp = gpar(col = row_colors, fontsize = 20),
+  border = TRUE,
+  column_names_rot = 0,
+  column_names_centered = TRUE,
+  width = unit(ncol(mat) * 80, "mm") ,
+  column_title = "GO:BP terms related to lipid metabolism", 
+  column_title_gp = gpar(fontsize = "24"), 
+  column_title_side = "top",                              
+  show_heatmap_legend = FALSE
+)
+
+# save to PDF
+pdf("lipid_GO_BP_terms_heatmap_new_1.pdf", width = 24, height = 12)
+draw(ht)
+```
+## legends
+```{r}
+# Up-regulated legend
+lgd_up <- Legend(
+  title = "Enrichment score (-log10 Padj)\nfor up-regulated DEGs",
+  col_fun = colorRamp2(c(0, 3, 6), c("white", "#F4A582", "#B2182B")),
+  at = c(0, 3, 6),
+  labels = c("0", "3", "6"),
+  title_gp = gpar(fontsize = 15),
+  labels_gp = gpar(fontsize = 15),
+  direction = "vertical"
+)
+
+lgd_down <- Legend(
+  title = "Enrichment score (-log10 Padj)\nReflected for down-regulated DEGs",
+  col_fun = colorRamp2(c(-6, -3, 0), c("#08306B", "#6BAED6", "white")),  
+  at = c(-6, -3, 0),  
+  labels = c("-6", "-3", "0"),
+  title_gp = gpar(fontsize = 15),
+  labels_gp = gpar(fontsize = 15),
+  direction = "vertical"
+)
+
+combined_legend <- packLegend(
+  lgd_up, lgd_down,
+  direction = "horizontal",  
+  gap = unit(1, "cm")        
+)
+
+#output of legend
+pdf("custom_legend_3.pdf", width = 8, height = 3)  
+draw(combined_legend)
+dev.off()
+```
+
+# genes
+## RUN ONCE dig genes from GO terms for Up LPS group
+```{r}
+#load the rrvgo result csv.
+rrvgo_result <- read.csv ("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/Downstream analysis/gprofiler_output_0624/GO_BP_output/rrvgo_GOBP_output_0625_each_comparison/rrvgo_GO_BP_csv/Up_WT_LPS vs Control(BH_FDR)_rrvgo_reduced_terms.csv")
+# Up_WT_LPS_ATP_WT_Control(BH_FDR)_rrvgo_reduced_terms
+# Down_WT_LPS_ATP_WT_Control(BH_FDR)_rrvgo_reduced_terms
+
+# Find the rownames that not =0 in column "LPS vs Control" in lipids_matrix.
+non_zero_terms <- rownames(lipids_matrix)[lipids_matrix[,"LPS vs Control"] != 0]
+# For the selected row names, screen in the column "term" in "rrvgo_result", find the correspond row, extract column "go".
+matched_go <- rrvgo_result %>%
+  filter(term %in% non_zero_terms) %>%
+  select(term, go)
+# check the GO ID.
+print(matched_go)
+
+# find the column "intersections" in g:Profiler result according to their "term_id" or "term_name". 
+# load the gProfiler result
+gProfiler_result <- read.csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/gprofiler_output_0624/all_gprofiler_csv/Up_WT_LPS_WT_Control_Deubitique(BH_FDR).csv")
+# extract the column "go" in df "matched_go"
+go_ids <- matched_go$go
+# Filter the matching "term_id" in the g:Profiler results and extract the "intersections" column.
+matched_intersections <- gProfiler_result %>%
+  filter(term_id %in% go_ids) %>%
+  select(term_id, intersections)
+# check the intersection Ensembl ID.
+print(matched_intersections)
+# add the term_name
+matched_annotated <- matched_intersections %>%
+  left_join(gProfiler_result %>% select(term_id, term_name, negative_log10_of_adjusted_p_value),
+            by = "term_id")
+#save
+#write.csv(matched_annotated, "Lipid-related GOBP terms and genes for LPS vs Control up-regulated.csv", row.names = FALSE)
+```
+
+## RUN ONCE dig genes from GO terms for Up-regulated or Down-regulated LPS+ATP group
+```{r}
+#divide into Up- and Down- vector for LPS+ATP group in df "lipids_matrix".
+up_LPS_ATP <- lipids_matrix %>%
+  filter(`LPS+ATP vs Control` > 0)
+down_LPS_ATP <- lipids_matrix %>%
+  filter(`LPS+ATP vs Control` < 0)
+
+#load the rrvgo result csv.
+rrvgo_result <- read.csv ("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/gprofiler_output_0624/GO_BP_output/rrvgo_GOBP_output_0625_each_comparison/rrvgo_GO_BP_csv/Down_WT_LPS_ATP_WT_Control(BH_FDR)_rrvgo_reduced_terms.csv")
+# Down_WT_LPS_ATP_WT_Control(BH_FDR)_rrvgo_reduced_terms
+
+# Find the rownames that not =0 in column "LPS vs Control" in up_LPS_ATP.
+non_zero_terms <- rownames(down_LPS_ATP)[down_LPS_ATP[,"LPS+ATP vs Control"] != 0]
+# For the selected row names, screen in the column "term" in "rrvgo_result", find the correspond row, extract column "go".
+matched_go <- rrvgo_result %>%
+  filter(term %in% non_zero_terms) %>%
+  select(term, go)
+# check the GO ID.
+print(matched_go)
+
+# find the column "intersections" in g:Profiler result according to their "term_id" or "term_name". 
+# load the gProfiler result
+gProfiler_result <- read.csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/gprofiler_output_0624/all_gprofiler_csv/Down_WT_LPS_ATP_WT_Control(BH_FDR).csv")
+# Down_WT_LPS_ATP_WT_Control(BH_FDR)
+# extract the column "go" in df "matched_go"
+go_ids <- matched_go$go
+# Filter the matching "term_id" in the g:Profiler results and extract the "intersections" column.
+matched_intersections <- gProfiler_result %>%
+  filter(term_id %in% go_ids) %>%
+  select(term_id, intersections)
+# check the intersection Ensembl ID.
+print(matched_intersections)
+# add the term_name
+matched_annotated <- matched_intersections %>%
+  left_join(gProfiler_result %>% select(term_id, term_name, negative_log10_of_adjusted_p_value),
+            by = "term_id")
+#save
+#write.csv(matched_annotated, "Lipid-related GOBP terms and genes for LPS+ATP vs Control down-regulated.csv", row.names = FALSE)
+```
+## volcano plot for paras
+```{r}
+res_annotated <- read.csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/DEGs/0613_lowcounts5/Bulk/1) WT_LPS_ATP vs WT_Control/0613 WT_LPS_ATP_WT_Control(afterannotation).csv", header = TRUE, stringsAsFactors = FALSE)
+
+# set up two groups of genes we interested in.
+group1_genes <- c("Dgat2", "Acsl1", "Acsl5", "Fabp3", "Fabp7", "Ldlr")
+group2_genes <- c("Acadm", "Acaa2", "Ehhadh", "Acox3", "Decr1")
+group3_genes <- c("Nlrp3")
+
+# combine label
+genes_to_label <- c(group1_genes, group2_genes, group3_genes)
+
+# set up- or down-
+res_annotated <- res_annotated %>%
+  mutate(DEG_status = case_when(
+    padj < 0.05 & log2FoldChange > 1 ~ "Up",
+    padj < 0.05 & log2FoldChange < -1 ~ "Down",
+    TRUE ~ "Not Sig"
+  ))
+
+# Add dot color grouping (for label gene highlighting).
+res_annotated <- res_annotated %>%
+  mutate(highlight_group = case_when(
+    SYMBOL %in% group1_genes ~ "Lipid droplets biogenesis genes",
+    SYMBOL %in% group2_genes ~ "Oxidation/lipolysis genes",
+    #SYMBOL %in% group3_genes ~ "Inflammasome pathway–associated genes",
+    DEG_status == "Up" ~ "Up-regulated DEGs",
+    DEG_status == "Down" ~ "Down-regulated DEGs",
+    TRUE ~ "Not Sig"
+  ))
+
+# label data.
+label_df <- res_annotated %>%
+  filter(SYMBOL %in% genes_to_label)
+
+ggplot(res_annotated, aes(x = log2FoldChange, y = -log10(padj), color = highlight_group)) +
+  geom_point(
+    data = subset(res_annotated, highlight_group %in% c("Up-regulated DEGs", "Down-regulated DEGs", "Not Sig")),
+    aes(x = log2FoldChange, y = -log10(padj), color = highlight_group),
+    alpha = 0.3,
+    size = 0.5
+  ) +
+  # 第二层：高亮点，正常透明度
+  geom_point(
+    data = subset(res_annotated, highlight_group %in% c("Lipid droplets biogenesis genes", "Oxidation/lipolysis genes")),
+    aes(x = log2FoldChange, y = -log10(padj), color = highlight_group),
+    alpha = 1,
+    size = 1.5
+  ) + 
+  #facet_zoom(xlim = c(-5, 5), zoom.size = 1) +  # zoom in
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed") +
+  geom_text_repel(data = label_df, aes(label = SYMBOL), size = 8, fontface = "bold", max.overlaps = 100, show.legend = FALSE) +
+  scale_color_manual(values = c(
+    "Up-regulated DEGs" = "#F46D43",          
+    "Down-regulated DEGs" = "#6BAED6",        
+    "Not Sig" = "lightgray",   
+    "Lipid droplets biogenesis genes" = "#6A3D9A",  
+    "Oxidation/lipolysis genes" = "#E69F00" 
+  ))+
+  scale_x_continuous(
+    breaks = c(-10, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 10),
+    limits = c(-10, 10)
+  )+
+  coord_cartesian(ylim = c(0, 300)) +
+  labs(
+    x = "log2 Fold Change",
+    y = "-log10 Adjusted P-value",
+    title = "Differentially expressed genes in LPS+ATP vs control BMDMs"
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 4))) + 
+  theme(panel.background = element_rect(fill = "white", color = NA),
+        plot.background = element_rect(fill = "white", color = NA),
+        axis.line = element_line(color = "grey"),
+        plot.title = element_text(size = 24, hjust = 0.5),
+        axis.title = element_text(size = 15),
+        axis.text = element_text(size = 10),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank() 
+  )
+ggsave("LPS+ATP vs Control volcano plot_1005_4.pdf", width = 14, height = 10)
+```
+## volcano plot for genes dig from GOBP terms
+```{r}
+res_annotated <- read.csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/DEGs/0613_lowcounts5/Bulk/1) WT_LPS_ATP vs WT_Control/0613 WT_LPS_ATP_WT_Control(afterannotation).csv", header = TRUE, stringsAsFactors = FALSE)
+
+#res_annotated <- read.csv("C:/Users/HUAWEI/OneDrive - Imperial College London/Documents/Transcriptomic/output/DEGs/0613_lowcounts5/Deubiquitinase_OTUD6A/0613DEA_result_WT_LPS_WT_Control(afterannotation).csv", header = TRUE, stringsAsFactors = FALSE)
+
+# set up two groups of genes we interested in.
+group1_genes <- c("Cd36", "Scd1", "Pparg", "Ppard", "Dgat2", "Plin4", "Pcyt1a", "Pnpla7", "Fasn", "Ppt2", "Plpp3", "Fads2", "Fads1", "Cyp51",
+"Fahd1", "Lpin1", "Lpin3", "Abhd17b", "Abhd15",
+  "Fabp5", "Fabp3", "Fabp4", "Fabp7", 
+  "Acsl1", "Acsl3", "Acsl5", "Acsl6")
+group2_genes <- c("Il1b", "Casp1", "Nfkbia", "Nlrp3", "Gsdmd", "P2rx7")
+
+# combine label
+genes_to_label <- c(group1_genes, group2_genes)
+
+# set up- or down-
+res_annotated <- res_annotated %>%
+  mutate(DEG_status = case_when(
+    padj < 0.05 & log2FoldChange > 1 ~ "Up",
+    padj < 0.05 & log2FoldChange < -1 ~ "Down",
+    TRUE ~ "Not Sig"
+  ))
+
+# Add dot color grouping (for label gene highlighting).
+res_annotated <- res_annotated %>%
+  mutate(highlight_group = case_when(
+    SYMBOL %in% group1_genes ~ "Lipid metabolism–associated genes",
+    SYMBOL %in% group2_genes ~ "Inflammasome pathway–associated genes",
+    DEG_status == "Up" ~ "Up-regulated DEGs",
+    DEG_status == "Down" ~ "Down-regulated DEGs",
+    TRUE ~ "Not Sig"
+  ))
+
+# label data.
+label_df <- res_annotated %>%
+  filter(SYMBOL %in% genes_to_label)
+
+# those genes which padj=0
+#res_annotated <- res_annotated %>%
+ # mutate(padj = ifelse(padj == 0, 1e-300, padj)) 
+```
+
+```{r}
+# drawing
+ggplot(res_annotated, aes(x = log2FoldChange, y = -log10(padj), color = highlight_group)) +
+geom_point(
+  data = subset(res_annotated, highlight_group %in% c("Up-regulated DEGs", "Down-regulated DEGs", "Not Sig")),
+  aes(x = log2FoldChange, y = -log10(padj), color = highlight_group),
+  alpha = 0.3,
+  size = 0.5
+) +
+geom_point(
+  data = subset(res_annotated, highlight_group %in% c("Lipid droplets biogenesis genes", "Oxidation/lipolysis genes")),
+  aes(x = log2FoldChange, y = -log10(padj), color = highlight_group),
+  alpha = 1,
+  size = 1.5
+) + 
+  #facet_zoom(xlim = c(-5, 5), zoom.size = 1) +  # zoom in
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed") +
+  geom_text_repel(data = label_df, aes(label = SYMBOL), size = 6, fontface = "bold", max.overlaps = 100, show.legend = FALSE) +
+  scale_color_manual(values = c(
+  "Up-regulated DEGs" = "#F46D43",          
+  "Down-regulated DEGs" = "#6BAED6",        
+  "Not Sig" = "lightgray",   
+  "Lipid metabolism–associated genes" = "#6A3D9A",  
+  "Inflammasome pathway–associated genes" = "#4D4D4D" 
+))+
+  scale_x_continuous(
+  breaks = c(-10, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 10),
+  limits = c(-10, 10)
+)+
+  coord_cartesian(ylim = c(0, 300)) +
+  labs(
+    x = "log2 Fold Change",
+    y = "-log10 Adjusted P-value",
+    title = "LPS+ATP vs control: differentially expressed genes"
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 4))) + 
+  theme(panel.background = element_rect(fill = "white", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    axis.line = element_line(color = "grey"),
+    plot.title = element_text(size = 24, hjust = 0.5),
+    axis.title = element_text(size = 15),
+  axis.text = element_text(size = 10),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 15),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank() 
+  )
+ggsave("LPS+ATP vs Control volcano plot_1005.pdf", width = 14, height = 10)
+```
+
